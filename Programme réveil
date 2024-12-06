@@ -1,0 +1,85 @@
+#include <LedControl.h>
+#include <RTClib.h>
+#include <SPI.h>
+
+// Configuration des broches pour les matrices LED
+#define DIN 11  // Broche de données (MOSI)
+#define CLOCK 8     // Broche d'horloge (SCK)
+#define LOAD_CS 10  // Broche de sélection (SS)
+
+// Initialisation des matrices LED (4 matrices en série)
+LedControl matrixControl = LedControl(DIN, CLOCK, LOAD_CS, 4);
+
+// Initialisation du module RTC DS1307
+RTC_DS1307 rtc;
+
+// Variable pour gérer le clignotement
+bool colonState = true;
+
+// Fonction pour écrire un chiffre sur une matrice LED
+void drawDigit(int matrixIndex, int digit) {
+  const byte numbers[10][8] = {
+    {0b00111100, 0b01000010, 0b01000010, 0b01000010, 0b01000010, 0b01000010, 0b01000010, 0b00111100}, // 0
+    {0b00001000, 0b00011000, 0b00101000, 0b00001000, 0b00001000, 0b00001000, 0b00001000, 0b00011100}, // 1
+    {0b00111100, 0b01000010, 0b00000010, 0b00000100, 0b00001000, 0b00010000, 0b00100000, 0b01111110}, // 2
+    {0b00111100, 0b01000010, 0b00000010, 0b00001100, 0b00000010, 0b00000010, 0b01000010, 0b00111100}, // 3
+    {0b00000100, 0b00001100, 0b00010100, 0b00100100, 0b01111110, 0b00000100, 0b00000100, 0b00000100}, // 4
+    {0b01111110, 0b01000000, 0b01111100, 0b00000010, 0b00000010, 0b00000010, 0b01000010, 0b00111100}, // 5
+    {0b00111100, 0b01000010, 0b01000000, 0b01111100, 0b01000010, 0b01000010, 0b01000010, 0b00111100}, // 6
+    {0b01111110, 0b01000010, 0b00000100, 0b00001000, 0b00001000, 0b00010000, 0b00010000, 0b00010000}, // 7
+    {0b00111100, 0b01000010, 0b01000010, 0b00111100, 0b01000010, 0b01000010, 0b01000010, 0b00111100}, // 8
+    {0b00111100, 0b01000010, 0b01000010, 0b00111110, 0b00000010, 0b00000010, 0b01000010, 0b00111100}  // 9
+  };
+
+  for (int row = 0; row < 8; row++) {
+    matrixControl.setRow(matrixIndex, row, numbers[digit][row]);
+  }
+}
+
+// Fonction pour afficher un nombre sur deux matrices
+void AffichageTemps(int leftMatrix, int rightMatrix, int value) {
+  drawDigit(leftMatrix, value / 10);  // Dizaine
+  drawDigit(rightMatrix, value % 10); // Unité
+}
+
+// Fonction pour gérer le clignotement des deux points
+void toggleColon(bool state) {
+  matrixControl.setLed(1, 3, 7, state); // LED supérieure entre heures et minutes
+  matrixControl.setLed(1, 6, 7, state); // LED inférieure entre heures et minutes
+}
+
+// Initialisation des matrices LED et RTC
+void setup() {
+  for (int i = 0; i < 4; i++) {
+    matrixControl.shutdown(i, false); // Active la matrice
+    matrixControl.setIntensity(i, 7); // Luminosité moyenne
+    matrixControl.clearDisplay(i);    // Efface l'affichage
+  }
+
+  if (!rtc.begin()) {
+    while (1) {
+      // Bloquer si le module RTC est introuvable
+    }
+  }
+
+  if (!rtc.isrunning()) {
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Réinitialise l'horloge à la date et l'heure de compilation
+  }
+}
+
+// Boucle principale
+void loop() {
+  DateTime tempsActuel = rtc.now();
+
+  // Affichage des heures (matrices 0 et 1)
+  AffichageTemps(0, 1, tempsActuel.hour());
+
+  // Affichage des minutes (matrices 2 et 3)
+  AffichageTemps(2, 3, tempsActuel.minute());
+
+  // Clignotement des deux points
+  toggleColon(colonState);
+  colonState = !colonState; // inversement de l'état des deux points
+
+  delay(1000); // Pause d'une seconde
+}
